@@ -78,7 +78,7 @@ summary{cursor:pointer;font-weight:700}
 <main>
   <div class="top">
     <div><h1>AJANG</h1><div class="tag">Aksi Jaga Kebugaran</div></div>
-    <button id="mode">Mode admin: mati</button>
+    <button id="mode" style="display:none">Mode admin: mati</button>
   </div>
 
   <div class="panel hide" id="admin">
@@ -87,6 +87,8 @@ summary{cursor:pointer;font-weight:700}
       <button class="primary" id="give">Beri poin ke 0 pengurus terpilih</button>
       <button id="all">Pilih semua</button>
       <button id="none">Kosongkan pilihan</button>
+      <button id="chpin">Ganti PIN</button>
+      <button class="primary" id="exp">Ekspor data.json</button>
     </div>
     <details style="margin-top:10px"><summary>Kelola jenis poin</summary>
       <div class="chips" id="chips"></div>
@@ -172,8 +174,32 @@ document.getElementById("q").oninput=function(e){query=e.target.value;render()};
 document.getElementById("sort").onclick=function(e){byRank=!byRank;e.target.textContent=byRank?"Urut: peringkat":"Urut: daftar awal";render()};
 document.getElementById("apply").onclick=function(){BASE=ranks();save();render()};
 document.getElementById("reset").onclick=function(){if(confirm("Reset semua poin ke 0 dan hapus riwayat?")){S.forEach(function(s){s.score=0});LOG=[];sel={};BASE=ranks();save();render()}};
-document.getElementById("mode").onclick=function(e){admin=!admin;document.body.classList.toggle("admin",admin);document.getElementById("admin").classList.toggle("hide",!admin);document.getElementById("reset").style.display=admin?"":"none";e.target.textContent="Mode admin: "+(admin?"aktif":"mati");render()};
-load();render();
+async function hashPin(p){var s="ajang:"+p;try{var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}catch(e){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))>>>0;return"d"+h}}
+function getPin(){try{return localStorage.getItem(KEY+"-pin")}catch(e){return null}}
+function setPin(v){try{localStorage.setItem(KEY+"-pin",v)}catch(e){}}
+async function newPin(){var p=prompt("Buat PIN admin (minimal 4 karakter):");if(!p||p.length<4)return false;if(p!==prompt("Ulangi PIN:")){alert("PIN tidak sama.");return false}setPin(await hashPin(p));return true}
+function setAdmin(on){admin=on;document.body.classList.toggle("admin",admin);document.getElementById("admin").classList.toggle("hide",!admin);document.getElementById("reset").style.display=admin?"":"none";document.getElementById("mode").textContent="Mode admin: "+(admin?"aktif":"mati");render()}
+document.getElementById("mode").onclick=async function(){
+  if(admin){setAdmin(false);return}
+  var st=getPin();
+  if(!st){if(await newPin())setAdmin(true);return}
+  var q=prompt("Masukkan PIN admin:");if(q===null)return;
+  if(await hashPin(q)===st)setAdmin(true);else alert("PIN salah.")
+};
+document.getElementById("chpin").onclick=function(){newPin()};
+function isAdminUrl(){return location.hash==="#admin"}
+function showModeBtn(){document.getElementById("mode").style.display=isAdminUrl()?"":"none"}
+window.addEventListener("hashchange",showModeBtn);showModeBtn();
+document.getElementById("exp").onclick=function(){var b=new Blob([JSON.stringify({S:S,T:T,LOG:LOG,BASE:BASE,nid:nid})],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="data.json";document.body.appendChild(a);a.click();a.remove()};
+async function init(){
+  var remote=null,hasLocal=false;
+  try{var r=await fetch("data.json?t="+Date.now(),{cache:"no-store"});if(r.ok)remote=await r.json()}catch(e){}
+  try{hasLocal=!!localStorage.getItem(KEY)}catch(e){}
+  if(remote&&remote.S&&remote.S.length&&(!isAdminUrl()||!hasLocal)){S=remote.S;T=remote.T||[];LOG=remote.LOG||[];nid=remote.nid||100;BASE=remote.BASE||ranks()}
+  else load();
+  render()
+}
+init();
 </script>
 </body>
 </html>
